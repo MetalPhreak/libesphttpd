@@ -267,6 +267,35 @@ int ICACHE_FLASH_ATTR cgiRedirectApClientToHostname(HttpdConnData *connData) {
 	}
 }
 
+//Redirects clients on the SoftAP to the direct IP of the http server. Use when there is no hostname set on SoftAP side. 
+int ICACHE_FLASH_ATTR cgiRedirectApClientToIP(HttpdConnData *connData) {
+	uint32 *remadr;
+	struct ip_info apip;
+	char buff[1024];
+	char ipaddstr[16];
+	int x=wifi_get_opmode();
+	//Check if we have an softap interface; bail out if not
+	if (x!=2 && x!=3) return HTTPD_CGI_NOTFOUND;
+	remadr=(uint32 *)connData->conn->proto.tcp->remote_ip;
+	wifi_get_ip_info(SOFTAP_IF, &apip);
+	if ((*remadr & apip.netmask.addr) == (apip.ip.addr & apip.netmask.addr)) {
+		if (connData->conn==NULL) {
+			//Connection aborted. Clean up.
+			return HTTPD_CGI_DONE;
+		}
+		os_sprintf(ipaddstr, "%d.%d.%d.%d", IP2STR(&apip.ip));
+		//check if hostname is already the http SoftAP IP address
+		if (connData->hostName==NULL || os_strcmp(connData->hostName, ipaddstr)==0) return HTTPD_CGI_NOTFOUND;
+		//if not, redirect to SoftAP IP address
+		os_sprintf(buff, "http://%s/", ipaddstr);
+		os_printf("Hostname received is: %s\n", connData->hostName);
+		os_printf("Redirecting to hostname url %s\n", buff);
+		httpdRedirect(connData, buff);
+		return HTTPD_CGI_DONE;
+	} else {
+		return HTTPD_CGI_NOTFOUND;
+	}
+}
 
 //Add data to the send buffer. len is the length of the data. If len is -1
 //the data is seen as a C-string.
